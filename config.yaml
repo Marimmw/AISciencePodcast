@@ -1,0 +1,65 @@
+# ============ DEINE EINSTELLUNGEN ============
+podcast_title: "Mein Tech-Briefing"
+# --- Inhalt ---
+content_mode: "abstract"   # "abstract" = Abstracts/Teaser | "fulltext" = Volltext (PDF/Artikel), tiefer aber langsamer
+fulltext_chars: 30000      # max. Textmenge pro Thema im Volltext-Modus
+# --- Länge (variabel) ---
+minutes_per_item: 4        # Minuten pro Thema
+min_minutes: 20            # mindestens so lang (füllt notfalls mit den besten übrigen Themen auf)
+max_minutes: 60            # höchstens so lang
+min_score: 7               # nur Themen mit Bewertung >= 7 von 10 kommen rein -> Folge ist an ruhigen Tagen kürzer
+lookback_days: 3         # wie weit zurück nach Neuem gesucht wird
+keep_episodes: 14        # so viele Folgen bleiben im Feed
+model: "gemini-2.5-flash"
+daily_llm_budget: 60       # harte Obergrenze an Gemini-Anfragen pro Tag (normal sind ~5-18)
+fallback_model: "gemini-2.5-flash-lite"   # springt ein, falls das Tageslimit des Hauptmodells erreicht ist
+
+interests: |
+  - Robotik allgemein, besonders Soft Robotics, bioinspirierte Roboter, Greifer, Exoskelette
+  - Aktuatorik: Formgedächtnislegierungen, künstliche Muskeln, piezoelektrische und
+    elektroaktive Antriebe, Mechanismen für Luft- und Raumfahrt
+  - Luftfahrt: neue Antriebe, Morphing Wings, Drohnen, eVTOL, Wasserstoff, Hyperschall
+  - Raumfahrt: Raumfahrzeug-Technik, Landesysteme, In-Space-Manufacturing, Konzepte (NASA NIAC, ESA)
+  - Nautik / maritime Robotik: AUVs, Unterwasserantriebe, autonome Schiffe
+  - Medizintechnik und Medizinrobotik: minimalinvasive Chirurgie, Mikroroboter, Prothesen, Implantate
+  - Generell: überraschende, innovative Ingenieurskonzepte
+avoid: |
+  - Reine Firmen-PR, Finanzierungsrunden, Aktienkurse, Politik
+  - Reine Software-/Chatbot-Themen ohne Hardware-Bezug
+  - Inkrementelle Verbesserungen ohne neue Idee
+
+# Stimmen (edge-tts, kostenlos). Fallback, falls eine Stimme nicht klappt.
+voices:
+  LENA: "de-DE-SeraphinaMultilingualNeural"
+  JONAS: "de-DE-FlorianMultilingualNeural"
+fallback_voices:
+  LENA: "de-DE-KatjaNeural"
+  JONAS: "de-DE-ConradNeural"
+speech_rate: "+0%"       # z.B. "+10%" für schneller
+
+# ============ QUELLEN ============
+arxiv_per_query: 25
+arxiv_categories: [cs.RO, eess.SY, physics.space-ph, astro-ph.IM, physics.med-ph, physics.app-ph]
+arxiv_queries:
+  Unterwasser: 'all:"underwater vehicle" OR all:"autonomous surface vessel" OR all:"underwater robot"'
+  Aktuatoren: 'all:"shape memory alloy" OR all:"artificial muscle" OR all:"soft actuator"'
+  Luftfahrt: 'all:"morphing wing" OR all:"eVTOL" OR all:"hypersonic"'
+  Raumfahrt: 'all:spacecraft AND (all:mechanism OR all:actuator OR all:deployable)'
+  Medizinrobotik: 'all:"surgical robot" OR all:microrobot OR all:"continuum robot"'
+
+# Falls ein Feed nicht mehr existiert: einfach löschen/ersetzen, das Skript läuft trotzdem weiter.
+feeds:
+  IEEE Spectrum: "https://spectrum.ieee.org/feeds/feed.rss"
+  Science Robotics: "https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=scirobotics"
+  Science Advances: "https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=sciadv"
+  Nature Machine Intelligence: "https://www.nature.com/natmachintell.rss"
+  Nature Biomedical Engineering: "https://www.nature.com/natbiomedeng.rss"
+  TechXplore Robotik: "https://techxplore.com/rss-feed/robotics-news/"
+  TechXplore Engineering: "https://techxplore.com/rss-feed/engineering-news/"
+  Phys.org Raumfahrt: "https://phys.org/rss-feed/space-news/"
+  SpaceNews: "https://spacenews.com/feed/"
+  ESA Technologie: "https://www.esa.int/rssfeed/Our_Activities/Space_Engineering_Technology"
+  Hackaday: "https://hackaday.com/blog/feed/"
+  New Atlas: "https://newatlas.com/index.rss"
+  MDPI Actuators: "https://www.mdpi.com/rss/journal/actuators"
+  MDPI Aerospace: "https://www.mdpi.com/rss/journal/aerospace"
