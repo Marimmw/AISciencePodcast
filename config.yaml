@@ -19,6 +19,21 @@ quick_seconds: 30          # ungefähre Länge pro Kurzmeldung im Audio
 quick_in_audio: true       # true = am Ende der Folge vorgelesen + Shownotes | false = nur Shownotes
 quick_min_score: 6         # nur Themen ab dieser Bewertung kommen in die Kurzmeldungen
 
+# --- Patent-Ecke (optional) ---
+# Kostenlos über die EPO-Schnittstelle OPS (Registrierung nötig, KEINE Zahlungsdaten eintragen!). Braucht 2 GitHub-Secrets:
+# EPO_OPS_KEY und EPO_OPS_SECRET. Fehlen sie oder gibt es einen Fehler, läuft der Podcast normal ohne Patent-Ecke.
+patents_enabled: true     # true = Patent-Ecke am Ende der Folge, false = aus
+patents_max_minutes: 10    # maximale Länge der Patent-Ecke
+patents_seconds_each: 45   # ca. Sekunden pro Patent
+patents_min_score: 6       # nur Patente ab dieser Bewertung (1-10); an ruhigen Tagen kürzer
+patents_explainer: true    # kurzer Erklärteil zum Patentwesen (wechselndes Thema pro Tag, ca. 45 s)
+patents_lookback_days: 7   # Patentämter veröffentlichen wöchentlich; Gesendetes wird nie wiederholt
+patents_countries: [EP, US, WO, DE]   # nur diese Ämter (leer = alle; CN/JP/KR haben oft maschinenübersetzte Abstracts)
+patents_pages_per_query: 2 # je Suche max. 2 x 25 Treffer
+patents_max_candidates: 100 # so viele Kandidaten gehen ans LLM
+patents_max_requests: 30   # harte Obergrenze an OPS-Anfragen pro Lauf
+patents_max_mb: 30         # harte Obergrenze an Datenmenge pro Lauf (kostenlos wären 4000 MB pro Woche)
+
 # --- Mischung der Hauptthemen ---
 areas: [Robotik, Aktuatorik, Luftfahrt, Raumfahrt, Raketentechnik, Energie, Medizintechnik, Nautik, Autonome Fahrzeuge, DeepTech, Sonstiges]
 max_per_area: 4            # höchstens so viele Hauptthemen pro Bereich -> Themenvielfalt
@@ -121,3 +136,18 @@ feeds:
   NASASpaceflight: "https://www.nasaspaceflight.com/feed/"
   Ars Technica Space: "https://feeds.arstechnica.com/arstechnica/space"
   MIT Technology Review: "https://www.technologyreview.com/feed/"
+
+
+
+# CQL-Suchen für Patente (Datum wird automatisch ergänzt). ta = Titel/Abstract, cpc = Patentklasse.
+# Bei "HTTP 400" im Log ist eine Suche fehlerhaft: einfach vereinfachen oder löschen.
+patent_queries:
+  SoftRobotik_Aktuatoren: 'ta="soft robot" or ta="artificial muscle" or ta="shape memory alloy" or ta="soft actuator" or ta="electroactive polymer"'
+  Robotik_Hardware: 'cpc=B25J and (ta=gripper or ta=exoskeleton or ta="robot hand" or ta="continuum robot" or ta=microrobot)'
+  Luftfahrt: '(cpc=B64C or cpc=B64D or cpc=B64U) and (ta=morphing or ta=hydrogen or ta="electric propulsion" or ta=eVTOL or ta="vertical take-off")'
+  Raumfahrt_Raketen: 'cpc=B64G or cpc=F03H or (cpc=F02K and ta=rocket)'
+  Medizinrobotik: 'cpc=A61B and (ta="surgical robot" or ta="continuum robot" or ta=microrobot or ta="robotic catheter" or ta="magnetic actuation")'
+  Energie: '(cpc=H01M or cpc=C25B or cpc=G21B or cpc=H10K) and (ta="solid-state" or ta="sodium-ion" or ta=electrolyzer or ta=perovskite or ta=fusion or ta="energy storage")'
+  AutonomeFahrzeuge: '(cpc=B60W or cpc=G05D or cpc=G01S) and (ta=lidar or ta="autonomous vehicle" or ta="self-driving")'
+  Maritim: '(cpc=B63G or cpc=B63H or cpc=B63C) and (ta=underwater or ta=submersible or ta="unmanned underwater vehicle")'
+  DeepTech: 'ta=neuromorphic or ta="photonic chip" or ta=metamaterial or ta="quantum sensor" or ta="quantum computing"'

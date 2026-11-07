@@ -1,7 +1,7 @@
 name: daily-podcast
 on:
   schedule:
-    - cron: "30 3 * * *"   # 03:30 UTC = 04:30/05:30 Uhr deutscher Zeit; Laufzeit ca. 10 min
+    - cron: "30 3 * * *"   # 03:30 UTC = 04:30/05:30 Uhr deutscher Zeit; Laufzeit ca. 10-30 min
   workflow_dispatch:
 permissions:
   contents: write
@@ -26,6 +26,8 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+          EPO_OPS_KEY: ${{ secrets.EPO_OPS_KEY }}        # nur für die optionale Patent-Ecke
+          EPO_OPS_SECRET: ${{ secrets.EPO_OPS_SECRET }}
       - name: Veröffentlichen (Historie wird klein gehalten)
         run: |
           cd site
