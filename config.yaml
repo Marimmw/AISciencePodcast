@@ -10,9 +10,10 @@ max_minutes: 60            # höchstens so lang
 min_score: 7               # nur Themen mit Bewertung >= 7 von 10 kommen rein -> Folge ist an ruhigen Tagen kürzer
 lookback_days: 3         # wie weit zurück nach Neuem gesucht wird
 keep_episodes: 14        # so viele Folgen bleiben im Feed
-model: "gemini-2.5-flash"
+# Modelle der Reihe nach (nur Modelle mit kostenlosem Kontingent!). Ist eines nicht verfügbar
+# oder sein Tageslimit erreicht, wird automatisch das nächste genommen.
+models: ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
 daily_llm_budget: 60       # harte Obergrenze an Gemini-Anfragen pro Tag (normal sind ~5-18)
-fallback_model: "gemini-2.5-flash-lite"   # springt ein, falls das Tageslimit des Hauptmodells erreicht ist
 
 interests: |
   - Robotik allgemein, besonders Soft Robotics, bioinspirierte Roboter, Greifer, Exoskelette
@@ -58,8 +59,5 @@ feeds:
   TechXplore Engineering: "https://techxplore.com/rss-feed/engineering-news/"
   Phys.org Raumfahrt: "https://phys.org/rss-feed/space-news/"
   SpaceNews: "https://spacenews.com/feed/"
-  ESA Technologie: "https://www.esa.int/rssfeed/Our_Activities/Space_Engineering_Technology"
   Hackaday: "https://hackaday.com/blog/feed/"
   New Atlas: "https://newatlas.com/index.rss"
-  MDPI Actuators: "https://www.mdpi.com/rss/journal/actuators"
-  MDPI Aerospace: "https://www.mdpi.com/rss/journal/aerospace"

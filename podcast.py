@@ -110,23 +110,37 @@ def article_text(cfg, c):
 BUDGET = {"left": 10**9}  # harte Obergrenze für LLM-Anfragen pro Tag (inkl. Wiederholungen)
 
 
+MODELS = {"list": [], "i": 0}  # Modellkette aus config.yaml; wird bei Fehlern der Reihe nach durchgegangen
+
+
 def llm(client, cfg, prompt, json_mode=False):
     conf = types.GenerateContentConfig(response_mime_type="application/json") if json_mode else None
-    model = cfg["model"]
-    for attempt in range(6):
+    fails = 0
+    while True:
+        if MODELS["i"] >= len(MODELS["list"]):
+            raise RuntimeError("Kein Gemini-Modell verfügbar (siehe 'models' in config.yaml)")
         if BUDGET["left"] <= 0:
             raise RuntimeError("Tagesbudget für LLM-Anfragen erreicht (daily_llm_budget)")
         BUDGET["left"] -= 1
-        if attempt >= 3 and cfg.get("fallback_model"):
-            model = cfg["fallback_model"]  # z.B. bei erschöpftem Tageskontingent
+        model = MODELS["list"][MODELS["i"]]
         try:
             r = client.models.generate_content(model=model, contents=prompt, config=conf)
             if r.text:
                 return r.text
+            err = "leere Antwort"
         except Exception as ex:
-            print(f"LLM-Fehler (Versuch {attempt+1}): {str(ex)[:150]}")
-        time.sleep(15 * (attempt + 1))  # Free-Tier-Limits abwarten
-    raise RuntimeError("LLM nicht erreichbar")
+            err = str(ex)
+            if "404" in err or "NOT_FOUND" in err:
+                print(f"Modell {model} nicht verfügbar -> nächstes Modell")
+                MODELS["i"] += 1
+                continue
+        fails += 1
+        print(f"LLM-Fehler ({model}, Versuch {fails}): {err[:150]}")
+        if fails >= 6:
+            raise RuntimeError("LLM nicht erreichbar")
+        if fails % 3 == 0 and MODELS["i"] < len(MODELS["list"]) - 1:
+            MODELS["i"] += 1  # z.B. Tageslimit dieses Modells erschöpft -> anderes Modell hat eigenes Kontingent
+        time.sleep(15 * fails)
 
 
 def rank(client, cfg, cands):
@@ -283,6 +297,13 @@ def main():
     state = json.loads(sp.read_text(encoding="utf-8")) if sp.exists() else {"seen": [], "episodes": []}
 
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    MODELS["list"] = cfg.get("models") or [cfg["model"]]
+    try:
+        names = [m.name.replace("models/", "") for m in client.models.list()
+                 if "generateContent" in (getattr(m, "supported_actions", None) or [])]
+        print("Für diesen Key verfügbare Modelle:", ", ".join(n for n in names if "gemini" in n))
+    except Exception as ex:
+        print("Modellliste nicht abrufbar:", str(ex)[:100])
     day = f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d}"
     usage = state.get("llm_usage", {})
     budget_total = cfg.get("daily_llm_budget", 60)
