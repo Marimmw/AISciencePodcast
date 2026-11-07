@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Täglicher KI-Podcast: Quellen holen -> ranken -> Skripte -> TTS -> RSS-Feed."""
+"""Täglicher KI-Podcast: Quellen holen -> filtern -> ranken -> Skripte -> TTS -> RSS-Feed."""
 import os, re, io, json, time, asyncio, html, hashlib, urllib.request, threading
 import datetime as dt
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -66,6 +66,35 @@ def fetch_candidates(cfg):
             time.sleep(3)  # arXiv-Höflichkeitspause
     print(f"{len(items)} Kandidaten aus {len(sources)} Quellen")
     return items
+
+
+def _kw_regex(words):
+    """Stichwortliste -> Regex. 'prosthe*' = Wortanfang, sonst ganzes Wort."""
+    parts = []
+    for w in words or []:
+        w = w.lower().strip()
+        if not w:
+            continue
+        parts.append(r"(?<!\w)" + (re.escape(w[:-1]) + r"\w*" if w.endswith("*") else re.escape(w) + r"(?!\w)"))
+    return re.compile("|".join(parts), re.I) if parts else None
+
+
+def prefilter(cfg, cands):
+    """Wirft offensichtlich Uninteressantes vorab raus (spart Zeit und LLM-Tokens).
+    Ein Eintrag fliegt nur, wenn er ein exclude-Stichwort enthält UND kein Hardware-Stichwort."""
+    ex, hw = _kw_regex(cfg.get("exclude_keywords")), _kw_regex(cfg.get("hardware_keywords"))
+    if not ex:
+        return cands
+    out, dropped = [], []
+    for c in cands:
+        t = f"{c['title']} {c['text'][:500]}"
+        if ex.search(t) and not (hw and hw.search(t)):
+            dropped.append(c)
+        else:
+            out.append(c)
+    print(f"Vorfilter: {len(dropped)} von {len(cands)} aussortiert, z.B.: " +
+          " | ".join(c["title"][:50] for c in dropped[:4]))
+    return out
 
 
 def arxiv_pdf_text(link, limit):
@@ -166,37 +195,138 @@ def llm(client, cfg, prompt, json_mode=False, _no_thinking=False):
         time.sleep(15 * fails)
 
 
-def rank(client, cfg, cands):
-    mpi = cfg["minutes_per_item"]
-    n_min = max(1, round((cfg["min_minutes"] - 1) / mpi))
-    n_max = max(n_min, round((cfg["max_minutes"] - 1) / mpi))
-    listing = "\n".join(f"[{i}] ({c['source']}) {c['title']} — {c['text'][:350]}" for i, c in enumerate(cands))
-    prompt = f"""Du bist Redakteur eines technischen Podcasts für einen ingenieurwissenschaftlich interessierten Hörer.
+def _json_list(text):
+    data = json.loads(text)
+    if isinstance(data, dict):  # manche Modelle verpacken die Liste in ein Objekt
+        data = next((v for v in data.values() if isinstance(v, list)), [])
+    return data if isinstance(data, list) else []
 
-INTERESSEN:
-{cfg['interests']}
-UNINTERESSANT:
-{cfg['avoid']}
 
-Bewerte die Einträge und wähle bis zu {n_max} aus. Vergib einen score von 1-10
-(10 = sensationell neu und genau passend; 7 = lohnt sich in einer Folge; darunter = überspringen).
-Bevorzuge echte technische Neuheiten und überraschende Konzepte vor PR und Meinung, sorge für Themenmischung.
-Lieber weniger Einträge als Füllmaterial.
-Antworte NUR mit JSON: [{{"id": <Nummer>, "score": <1-10>, "why": "<ein Satz>"}}], beste zuerst.
+# ---------------------------------------------------------------- 2. Auswahl
+RANK_PROMPT = """Du bist Chefredakteur eines Technik-Podcasts für einen Ingenieur mit breitem Interesse.
+
+HAUPTINTERESSEN (hier gibt es Bonuspunkte):
+{interests}
+
+NEBENINTERESSEN:
+{interests_side}
+
+UNINTERESSANT (Punktabzug):
+{avoid}
+
+PUNKTE (starte bei 5, maximal 10):
++2  neues physikalisches/mechanisches Prinzip, neue Hardware, neues Material oder wirklich neues Konzept
++1  echter Beleg: Prototyp, Experiment, Flug-/Wassertest, klinische oder in-vivo-Daten (nicht nur Simulation)
++1  passt zu den Hauptinteressen
++1  überraschend und auch für Nicht-Spezialisten nach kurzer Erklärung spannend
+-2  reine Software/KI/Simulation ohne Hardware-Bezug
+-2  Firmen-PR, Finanzierung, Meinung, Ankündigung ohne technische Substanz
+-1  inkrementelle Verbesserung, Benchmark, Dataset, Review ohne neue Idee
+-1  rein theoretisch ohne erkennbare Anwendung
+Eine 9 oder 10 vergibst du höchstens 1-2 Mal pro Tag. Eine 7 bedeutet: lohnt sich wirklich in einer Folge.
+Wenn mehrere Einträge dieselbe Geschichte behandeln, gib bei den schwächeren das Feld "dup_of" mit der Nummer des besten an.
+
+Wähle bis zu {n_total} Einträge (die besten zuerst, auch solche knapp unter 7 für Kurzmeldungen).
+Gib jedem Eintrag ein "area" aus dieser Liste: {areas}.
+Antworte NUR mit JSON:
+[{{"id": <Nummer>, "score": <1-10>, "area": "<Bereich>", "dup_of": <Nummer oder null>, "why": "<ein Satz>"}}]
 
 LISTE:
 {listing}"""
-    data = json.loads(llm(client, cfg, prompt, json_mode=True))
+
+
+def rank(client, cfg, cands):
+    """Liefert (Hauptthemen [(c, score, area)], Kurzmeldungen [c])."""
+    mpi = cfg["minutes_per_item"]
+    n_min = max(1, round((cfg["min_minutes"] - 1) / mpi))
+    n_max = max(n_min, round((cfg["max_minutes"] - 1) / mpi))
+    q_n = cfg.get("quick_items", 10)
+    areas = cfg.get("areas") or ["Sonstiges"]
+    listing = "\n".join(f"[{i}] ({c['source']}) {c['title']} — {c['text'][:350]}" for i, c in enumerate(cands))
+    prompt = RANK_PROMPT.format(
+        interests=cfg["interests"], interests_side=cfg.get("interests_side", "-"), avoid=cfg["avoid"],
+        n_total=n_max + q_n + 5, areas=", ".join(areas), listing=listing)
+    data = _json_list(llm(client, cfg, prompt, json_mode=True))
+
     ranked, used = [], set()
     for d in data:
+        if not isinstance(d, dict):
+            continue
         i, s = d.get("id"), d.get("score", 0)
-        if isinstance(i, int) and 0 <= i < len(cands) and i not in used:
-            used.add(i); ranked.append((cands[i], s if isinstance(s, (int, float)) else 0))
-    ranked.sort(key=lambda x: -x[1])
-    chosen = [(c, s) for c, s in ranked if s >= cfg["min_score"]][:n_max]
-    if len(chosen) < n_min:
-        chosen = ranked[:n_min]
-    return chosen
+        if not (isinstance(i, int) and 0 <= i < len(cands)) or i in used:
+            continue
+        used.add(i)
+        dup = d.get("dup_of")
+        ranked.append({"i": i, "c": cands[i], "s": s if isinstance(s, (int, float)) else 0,
+                       "area": d.get("area") if d.get("area") in areas else "Sonstiges",
+                       "dup": dup if isinstance(dup, int) else None})
+    ranked.sort(key=lambda r: -r["s"])
+
+    # Duplikate (gleiche Geschichte) entfernen: der bessere Eintrag bleibt
+    kept, kept_ids = [], set()
+    for r in ranked:
+        if r["dup"] is not None and r["dup"] in kept_ids:
+            continue
+        kept.append(r); kept_ids.add(r["i"])
+
+    # Hauptthemen: Mindestscore + Begrenzung pro Bereich und Quelle für gute Mischung
+    max_area, max_src, max_arx = cfg.get("max_per_area", 4), cfg.get("max_per_source", 3), cfg.get("max_arxiv_items", 8)
+    main, rest, n_area, n_src = [], [], {}, {}
+    for r in kept:
+        grp = "arXiv" if r["c"]["arxiv"] else r["c"]["source"]
+        limit = max_arx if r["c"]["arxiv"] else max_src
+        if (r["s"] >= cfg["min_score"] and len(main) < n_max
+                and n_area.get(r["area"], 0) < max_area and n_src.get(grp, 0) < limit):
+            main.append(r); n_area[r["area"]] = n_area.get(r["area"], 0) + 1; n_src[grp] = n_src.get(grp, 0) + 1
+        else:
+            rest.append(r)
+    while len(main) < n_min and rest:  # Mindestlänge: mit den besten Übrigen auffüllen
+        main.append(rest.pop(0))
+    quick = [r["c"] for r in rest if r["s"] >= cfg.get("quick_min_score", 6)][:q_n]
+    print("Bereiche:", ", ".join(f"{a} {n}" for a, n in sorted(n_area.items())) or "-")
+    return [(r["c"], r["s"], r["area"]) for r in main], quick
+
+
+def quick_summaries(client, cfg, items):
+    """Je Kurzmeldung ca. 30 s gesprochener Text + 1 Satz für die Shownotes -> [(c, spoken, note)]."""
+    if not items:
+        return []
+    words = int(cfg.get("quick_seconds", 30) * 2.5)
+    listing = "\n".join(f"[{i}] ({c['source']}) {c['title']} — {c['text'][:700]}" for i, c in enumerate(items))
+    prompt = f"""Du schreibst den Podcast-Teil "Kurzmeldungen" (Deutsch). Zu jedem Eintrag:
+- "spoken": gesprochener Text, ca. {words} Wörter (ca. {cfg.get('quick_seconds', 30)} Sekunden). Erster Satz nennt das Thema klar,
+  damit Hörer merken, dass ein neues beginnt. Dann: was ist neu, wie funktioniert es in einfachen Worten, warum interessant.
+  Nur Fakten aus dem Eintrag, nichts erfinden, Fachbegriffe kurz erklären. Reiner Fließtext, kein Markdown.
+- "note": ein Satz (max. 25 Wörter) für die Shownotes.
+Antworte NUR mit JSON: [{{"id": <Nummer>, "spoken": "...", "note": "..."}}]
+
+EINTRÄGE:
+{listing}"""
+    res = {}
+    try:
+        for d in _json_list(llm(client, cfg, prompt, json_mode=True)):
+            i = d.get("id") if isinstance(d, dict) else None
+            if isinstance(i, int) and 0 <= i < len(items):
+                res[i] = (clean(str(d.get("spoken", ""))), clean(str(d.get("note", ""))))
+    except Exception as ex:
+        print(f"Kurzmeldungen nicht erzeugt: {str(ex)[:120]}")
+    return [(c, *res.get(i, ("", ""))) for i, c in enumerate(items)]
+
+
+def quick_lines(qs):
+    lines = [("LENA", "Zum Schluss noch die Kurzmeldungen: was sonst noch los war, jeweils in etwa einer halben Minute.")]
+    for n, (_, spoken, _) in enumerate(qs):
+        lines.append(("JONAS" if n % 2 == 0 else "LENA", spoken))
+    return lines
+
+
+def build_notes(done, qs):
+    li = lambda c, extra="": f'<li><a href="{esc(c["link"])}">{esc(c["title"])}</a> ({esc(c["source"])}){extra}</li>'
+    h = "<p><b>Themen dieser Folge</b></p><ul>" + "".join(li(c) for c in done) + "</ul>"
+    if qs:
+        h += "<p><b>Kurzmeldungen (nicht ausführlich besprochen)</b></p><ul>" + "".join(
+            li(c, f": {esc(note)}" if note else "") for c, _, note in qs) + "</ul>"
+    return h
 
 
 SEGMENT_PROMPT = """Schreibe ein Podcast-Skript auf Deutsch als Gespräch zwischen LENA (Moderatorin, neugierig, stellt Verständnisfragen)
@@ -235,11 +365,12 @@ def parse_script(t):
     return lines
 
 
-def intro_outro(client, cfg, titles, today):
+def intro_outro(client, cfg, titles, today, quick_count=0):
     datum = f"{WEEKDAYS[today.weekday()]}, {today.day}. {MONTHS[today.month-1]}"
+    extra = f"\nErwähne im Intro kurz, dass am Ende {quick_count} Kurzmeldungen folgen." if quick_count else ""
     p = f"""Schreibe Intro und Outro für den Podcast "{cfg['podcast_title']}" als Gespräch zwischen LENA und JONAS (Deutsch, locker).
 Heute ist {datum}. Themen der Folge:
-{chr(10).join('- ' + t for t in titles)}
+{chr(10).join('- ' + t for t in titles)}{extra}
 INTRO: ca. 70 Wörter, Begrüßung, Datum, Vorschau auf die Themen (ohne Details zu verraten).
 OUTRO: ca. 40 Wörter, kurzer Abschied.
 Format strikt: zuerst eine Zeile "### INTRO", dann Zeilen "LENA: ..." / "JONAS: ...", dann "### OUTRO" und Zeilen. Kein Markdown sonst."""
@@ -292,7 +423,8 @@ def esc(s):
 def write_feed(cfg, state, base):
     items = []
     for ep in state["episodes"]:
-        items.append(f"""<item><title>{esc(ep['title'])}</title><description>{esc(ep['description'])}</description>
+        desc = ep["description"].replace("]]>", "]]&gt;")  # Shownotes als HTML in CDATA
+        items.append(f"""<item><title>{esc(ep['title'])}</title><description><![CDATA[{desc}]]></description>
 <pubDate>{ep['pub']}</pubDate><guid isPermaLink="false">{ep['guid']}</guid>
 <enclosure url="{base}/episodes/{ep['file']}" length="{ep['size']}" type="audio/mpeg"/>
 <itunes:duration>{ep['duration']}</itunes:duration></item>""")
@@ -336,11 +468,18 @@ def main():
     cands = [c for c in fetch_candidates(cfg) if c["id"] not in seen]
     if not cands:
         print("Nichts Neues."); return
+    cands = prefilter(cfg, cands)
+    cands.sort(key=lambda c: c["arxiv"])  # News/Journals zuerst, damit sie beim Kürzen nicht wegfallen (stabil)
+    cands = cands[:cfg.get("max_candidates", 350)]
+    if not cands:
+        print("Nach Vorfilter nichts übrig."); return
 
-    chosen = rank(client, cfg, cands[:300])
-    print(f"Ausgewählt ({len(chosen)} Themen, Modus: {cfg.get('content_mode')}):")
-    for c, s in chosen:
-        print(f" - [{s}] {c['title']}")
+    chosen, quick = rank(client, cfg, cands)
+    print(f"Ausgewählt ({len(chosen)} Hauptthemen, {len(quick)} Kurzmeldungen, Modus: {cfg.get('content_mode')}):")
+    for c, s, a in chosen:
+        print(f" - [{s}|{a}] {c['title']}")
+    for c in quick:
+        print(f" . (kurz) {c['title']}")
 
     # Segmente parallel erzeugen (segment_workers aus config.yaml, Standard: 1)
     workers = max(1, cfg.get("segment_workers", 1))
@@ -355,7 +494,7 @@ def main():
 
     body_parts, done_parts = {}, {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        fs = {pool.submit(_gen_seg, (k, c)): k for k, (c, _) in enumerate(chosen, 1)}
+        fs = {pool.submit(_gen_seg, (k, c)): k for k, (c, _, _) in enumerate(chosen, 1)}
         for fut in as_completed(fs):
             k, c, seg, err = fut.result()
             if err:
@@ -377,26 +516,30 @@ def main():
         sp.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
         raise SystemExit("Keine Segmente erzeugt")
 
+    # Kurzmeldungen: nicht besprochene Themen (je ca. 30 s), außerdem in den Shownotes
+    qs = quick_summaries(client, cfg, quick)
+    qspoken = [q for q in qs if q[1]]
+    in_audio = cfg.get("quick_in_audio", True) and bool(qspoken)
+
     today = dt.datetime.now(dt.timezone.utc)
-    intro, outro = intro_outro(client, cfg, [c["title"] for c in done], today)
-    lines = list(intro) + body + list(outro)
+    intro, outro = intro_outro(client, cfg, [c["title"] for c in done], today, len(qspoken) if in_audio else 0)
+    lines = list(intro) + body + (quick_lines(qspoken) if in_audio else []) + list(outro)
 
     audio = asyncio.run(synth(lines, cfg))
     fname = f"{today:%Y-%m-%d}.mp3"
     (SITE / "episodes" / fname).write_bytes(audio)
     secs = int(MP3(SITE / "episodes" / fname).info.length)
 
-    desc = "Themen:\n" + "\n".join(f"- {c['title']} ({c['source']})\n  {c['link']}" for c in done)
     ep = {"file": fname, "guid": f"{today:%Y-%m-%d}", "size": len(audio), "duration": secs,
           "pub": format_datetime(today),
           "title": f"{today.day}. {MONTHS[today.month-1]}: " + ", ".join(c["title"][:40] for c in done[:2]) + f" u.a. ({len(done)} Themen)",
-          "description": desc}
+          "description": build_notes(done, qs)}
     state["episodes"] = [e for e in state["episodes"] if e["file"] != fname]
     state["episodes"].insert(0, ep)
     for old in state["episodes"][cfg["keep_episodes"]:]:
         (SITE / "episodes" / old["file"]).unlink(missing_ok=True)
     state["episodes"] = state["episodes"][:cfg["keep_episodes"]]
-    state["seen"] = (state["seen"] + [c["id"] for c in done])[-3000:]
+    state["seen"] = (state["seen"] + [c["id"] for c in done] + [q[0]["id"] for q in qs])[-3000:]
     state["llm_usage"] = {"date": day, "count": budget_total - BUDGET["left"]}
     print(f"LLM-Anfragen heute insgesamt: {state['llm_usage']['count']}")
     sp.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")

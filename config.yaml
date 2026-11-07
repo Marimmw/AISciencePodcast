@@ -1,35 +1,70 @@
 # ============ DEINE EINSTELLUNGEN ============
 podcast_title: "Mein Tech-Briefing"
+
 # --- Inhalt ---
 content_mode: "abstract"   # "abstract" = Abstracts/Teaser | "fulltext" = Volltext (PDF/Artikel), tiefer aber langsamer
 fulltext_chars: 30000      # max. Textmenge pro Thema im Volltext-Modus
+
 # --- Länge (variabel) ---
-minutes_per_item: 4        # Minuten pro Thema
+minutes_per_item: 4        # Minuten pro Hauptthema
 min_minutes: 20            # mindestens so lang (füllt notfalls mit den besten übrigen Themen auf)
-max_minutes: 60            # höchstens so lang
-min_score: 7               # nur Themen mit Bewertung >= 7 von 10 kommen rein -> Folge ist an ruhigen Tagen kürzer
-lookback_days: 1         # wie weit zurück nach Neuem gesucht wird
-keep_episodes: 3        # so viele Folgen bleiben im Feed
+max_minutes: 60            # höchstens so lang (für Tests: 20)
+min_score: 7               # nur Themen mit Bewertung >= 7 von 10 kommen als Hauptthema rein
+lookback_days: 2           # wie weit zurück nach Neuem gesucht wird (Gehörtes wird nie wiederholt)
+keep_episodes: 2           # so viele Folgen bleiben im Feed
+
+# --- Kurzmeldungen (die nächstbesten Themen, die es nicht ins Hauptprogramm geschafft haben) ---
+quick_items: 10            # Anzahl Kurzmeldungen (0 = aus)
+quick_seconds: 30          # ungefähre Länge pro Kurzmeldung im Audio
+quick_in_audio: true       # true = am Ende der Folge vorgelesen + Shownotes | false = nur Shownotes
+quick_min_score: 6         # nur Themen ab dieser Bewertung kommen in die Kurzmeldungen
+
+# --- Mischung der Hauptthemen ---
+areas: [Robotik, Aktuatorik, Luftfahrt, Raumfahrt, Nautik, Medizintechnik, robotics, biomechanics, propulsion, Sonstiges]
+max_per_area: 4            # höchstens so viele Hauptthemen pro Bereich -> Themenvielfalt
+max_per_source: 3          # höchstens so viele pro News-/Journal-Quelle
+max_arxiv_items: 8         # höchstens so viele arXiv-Papers insgesamt als Hauptthemen
+max_candidates: 350        # so viele Kandidaten gehen maximal ins Ranking
+
+# --- Modelle / Tempo ---
 # Modelle der Reihe nach (nur Modelle mit kostenlosem Kontingent!). Ist eines nicht verfügbar
 # oder sein Tageslimit erreicht, wird automatisch das nächste genommen.
 models: ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
-thinking_level: "low"      # Gemini-Denkbudget: "none" / "low" / "medium" / "high" – fällt automatisch zurück falls Modell es nicht unterstützt
-segment_workers: 3          # Themen parallel erzeugen (3 gleichzeitig); spart ca. 2/3 der Wartezeit
-daily_llm_budget: 60       # harte Obergrenze an Gemini-Anfragen pro Tag (normal sind ~5-18)
+thinking_level: "low"      # "none" / "low" / "medium" / "high" – fällt automatisch zurück, falls ein Modell es nicht unterstützt
+segment_workers: 3         # Themen parallel erzeugen
+daily_llm_budget: 60       # harte Obergrenze an Gemini-Anfragen pro Tag (normal sind ~5-20)
 
+# --- Themenprofil ---
 interests: |
-  - Robotik allgemein, besonders Soft Robotics, bioinspirierte Roboter, Greifer, Exoskelette
-  - Aktuatorik: Formgedächtnislegierungen, künstliche Muskeln, piezoelektrische und
-    elektroaktive Antriebe, Mechanismen für Luft- und Raumfahrt
-  - Luftfahrt: neue Antriebe, Morphing Wings, Drohnen, eVTOL, Wasserstoff, Hyperschall
-  - Raumfahrt: Raumfahrzeug-Technik, Landesysteme, In-Space-Manufacturing, Konzepte (NASA NIAC, ESA)
-  - Nautik / maritime Robotik: AUVs, Unterwasserantriebe, autonome Schiffe
-  - Medizintechnik und Medizinrobotik: minimalinvasive Chirurgie, Mikroroboter, Prothesen, Implantate
-  - Generell: überraschende, innovative Ingenieurskonzepte
+  - Neue Hardware-Konzepte in der Robotik: Soft Robotics, bioinspirierte Roboter, Greifer, Exoskelette,
+    Mikro-/Nanoroboter, neuartige Fortbewegung
+  - Aktuatorik und Smart Materials: Formgedächtnislegierungen, künstliche Muskeln, elektroaktive Polymere,
+    piezoelektrische / magnetische / pneumatische Antriebe, Mechanismen, Gelenke, Leichtbau
+  - Luftfahrt-Technik: neue Antriebe (elektrisch, Wasserstoff, Hyperschall), Morphing Wings, eVTOL, Drohnen-Hardware, Flugtests
+  - Raumfahrt-Technik: Raumfahrzeug-Mechanismen, Landesysteme, Rover, In-Space-Servicing und -Manufacturing,
+    visionäre Konzepte (NASA NIAC, ESA), Triebwerke
+  - Maritime Technik: AUVs/ROVs, Unterwasserantriebe, bionische Unterwasserroboter, autonome Schiffe
+  - Medizintechnik: Chirurgie- und Katheterroboter, Kontinuumsroboter, Mikroroboter im Körper,
+    Prothesen, Implantate, Neurotechnik-Hardware
+interests_side: |
+  - Überraschende Ingenieursideen aus anderen Feldern (Sensorik, Energiespeicher, Materialien, Fertigung)
+  - Wichtige Meilensteine echter Missionen und Flüge (Technik dahinter, nicht Termine)
 avoid: |
-  - Reine Firmen-PR, Finanzierungsrunden, Aktienkurse, Politik
-  - Reine Software-/Chatbot-Themen ohne Hardware-Bezug
-  - Inkrementelle Verbesserungen ohne neue Idee
+  - Reine KI/Software: LLMs, Vision-Language-Action-Modelle, Foundation Models, Reinforcement-Learning-Algorithmen
+    ohne neue Hardware, Benchmarks, Datasets, Reviews
+  - Firmen-PR, Finanzierungsrunden, Aktien, Politik, Meinungsartikel, Produktankündigungen ohne Technikdetails
+  - Reine Astronomie/Astrophysik (Beobachtungen, Kosmologie); relevant ist die Technik von Raumfahrzeugen, nicht das Universum
+  - Industrieautomatisierung und Logistik-Roboter ohne neues Konzept
+
+# --- Vorfilter (läuft vor dem LLM, spart Zeit): Eintrag fliegt raus, wenn er ein exclude-Wort enthält
+#     UND kein hardware-Wort. "xyz*" = Wortanfang.
+exclude_keywords: ["benchmark*", "dataset*", "chatbot*", "agentic", "diffusion polic*",
+                   "series a", "series b", "funding round", "raises $", "ipo", "stock*"]
+hardware_keywords: ["actuat*", "gripper*", "soft robot*", "prototype*", "thruster*", "propeller*", "wing*",
+                    "spacecraft", "satellite*", "lander*", "rover*", "underwater", "surgical", "catheter*",
+                    "implant*", "exoskeleton*", "prosthe*", "artificial muscle*", "shape memory", "piezo*",
+                    "drone*", "uav*", "hardware", "mechanism*", "fabricat*", "3d-print*", "propulsion", "AI", "robotics",
+                    "morphing", "bionic", "robotic surgery"]
 
 # Stimmen (edge-tts, kostenlos). Fallback, falls eine Stimme nicht klappt.
 voices:
@@ -41,14 +76,17 @@ fallback_voices:
 speech_rate: "+0%"       # z.B. "+10%" für schneller
 
 # ============ QUELLEN ============
-arxiv_per_query: 25
-arxiv_categories: [cs.RO, eess.SY, physics.space-ph, astro-ph.IM, physics.med-ph, physics.app-ph]
+arxiv_per_query: 30
+# Nur cs.RO als ganze Kategorie; alles andere über gezielte Stichwortsuchen (weniger Rauschen als breite Kategorien)
+arxiv_categories: [cs.RO]
 arxiv_queries:
-  Unterwasser: 'all:"underwater vehicle" OR all:"autonomous surface vessel" OR all:"underwater robot"'
-  Aktuatoren: 'all:"shape memory alloy" OR all:"artificial muscle" OR all:"soft actuator"'
-  Luftfahrt: 'all:"morphing wing" OR all:"eVTOL" OR all:"hypersonic"'
-  Raumfahrt: 'all:spacecraft AND (all:mechanism OR all:actuator OR all:deployable)'
-  Medizinrobotik: 'all:"surgical robot" OR all:microrobot OR all:"continuum robot"'
+  SoftRobotik: 'all:"soft robot" OR all:"soft gripper" OR all:"bioinspired robot" OR all:"origami robot"'
+  Aktuatoren: 'all:"shape memory alloy" OR all:"artificial muscle" OR all:"soft actuator" OR all:"electroactive polymer" OR all:"piezoelectric actuator"'
+  Unterwasser: 'all:"underwater vehicle" OR all:"autonomous surface vessel" OR all:"underwater robot" OR all:"bioinspired underwater"'
+  Luftfahrt: 'all:"morphing wing" OR all:eVTOL OR all:hypersonic OR all:"electric aircraft" OR all:"hydrogen aircraft"'
+  Raumfahrt: '(all:spacecraft OR all:satellite OR all:lander OR all:rover) AND (all:mechanism OR all:actuator OR all:deployable OR all:"in-orbit")'
+  SpaceRobotik: 'all:"on-orbit servicing" OR all:"space robot" OR all:"in-space manufacturing" OR all:"space manipulator"'
+  Medizinrobotik: 'all:"surgical robot" OR all:microrobot OR all:"continuum robot" OR all:"magnetic microrobot" OR all:exoskeleton OR all:"prosthetic hand"'
 
 # Falls ein Feed nicht mehr existiert: einfach löschen/ersetzen, das Skript läuft trotzdem weiter.
 feeds:
