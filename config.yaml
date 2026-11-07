@@ -20,7 +20,7 @@ quick_in_audio: true       # true = am Ende der Folge vorgelesen + Shownotes | f
 quick_min_score: 6         # nur Themen ab dieser Bewertung kommen in die Kurzmeldungen
 
 # --- Mischung der Hauptthemen ---
-areas: [Robotik, Aktuatorik, Luftfahrt, Raumfahrt, Nautik, Medizintechnik, robotics, biomechanics, propulsion, Sonstiges]
+areas: [Robotik, Aktuatorik, Luftfahrt, Raumfahrt, Raketentechnik, Energie, Medizintechnik, Nautik, Autonome Fahrzeuge, DeepTech, Sonstiges]
 max_per_area: 4            # höchstens so viele Hauptthemen pro Bereich -> Themenvielfalt
 max_per_source: 3          # höchstens so viele pro News-/Journal-Quelle
 max_arxiv_items: 8         # höchstens so viele arXiv-Papers insgesamt als Hauptthemen
@@ -46,6 +46,11 @@ interests: |
   - Maritime Technik: AUVs/ROVs, Unterwasserantriebe, bionische Unterwasserroboter, autonome Schiffe
   - Medizintechnik: Chirurgie- und Katheterroboter, Kontinuumsroboter, Mikroroboter im Körper,
     Prothesen, Implantate, Neurotechnik-Hardware
+  - Raketentechnik und Antriebe: Wiederverwendbarkeit, Methan-/Vollstrom-Triebwerke, Rotating Detonation, elektrische und nukleare Antriebe
+  - Energietechnik: Festkörper-/Natrium-Ionen-Batterien, Fusion (Magnete, Stellarator), Speicher, Perowskit-Tandem, Elektrolyse, Geothermie
+  - Autonome Fahrzeuge: Sensorik (Lidar, Radar), Sicherheitsnachweis, Teleoperation, autonome Schiffe und Drohnen - Hardware und Systemdesign statt reiner Software
+  - Deep Tech: Quanten-Hardware, neuromorphe/photonische Chips, Metamaterialien, KI-entdeckte Materialien, synthetische Biologie
+  - Bonus für echte Durchbrüche: Größenordnungs-Sprünge bei Leistung, Effizienz oder Kosten, oder eine ganz neue Fähigkeit - belegt durch Prototyp oder Messung, nicht nur durch Ankündigung
 interests_side: |
   - Überraschende Ingenieursideen aus anderen Feldern (Sensorik, Energiespeicher, Materialien, Fertigung)
   - Wichtige Meilensteine echter Missionen und Flüge (Technik dahinter, nicht Termine)
@@ -64,7 +69,8 @@ hardware_keywords: ["actuat*", "gripper*", "soft robot*", "prototype*", "thruste
                     "spacecraft", "satellite*", "lander*", "rover*", "underwater", "surgical", "catheter*",
                     "implant*", "exoskeleton*", "prosthe*", "artificial muscle*", "shape memory", "piezo*",
                     "drone*", "uav*", "hardware", "mechanism*", "fabricat*", "3d-print*", "propulsion", "AI", "robotics",
-                    "morphing", "bionic", "robotic surgery"]
+                    "morphing", "bionic", "robotic surgery", "lidar", "radar", "battery", "batteries", "electrolyzer*", "tokamak", "stellarator", "magnet*",
+                    "thruster*", "engine*", "nozzle*", "turbine*", "chip*", "photonic*", "metamaterial*", "implant*"]
 
 # Stimmen (edge-tts, kostenlos). Fallback, falls eine Stimme nicht klappt.
 voices:
@@ -87,6 +93,12 @@ arxiv_queries:
   Raumfahrt: '(all:spacecraft OR all:satellite OR all:lander OR all:rover) AND (all:mechanism OR all:actuator OR all:deployable OR all:"in-orbit")'
   SpaceRobotik: 'all:"on-orbit servicing" OR all:"space robot" OR all:"in-space manufacturing" OR all:"space manipulator"'
   Medizinrobotik: 'all:"surgical robot" OR all:microrobot OR all:"continuum robot" OR all:"magnetic microrobot" OR all:exoskeleton OR all:"prosthetic hand"'
+  Raketentechnik: 'all:"rotating detonation" OR all:"Hall thruster" OR all:"electric propulsion" OR all:"nuclear thermal propulsion" OR all:"reusable launch" OR all:"methane rocket engine"'
+  Fusion: 'cat:physics.plasm-ph AND (all:tokamak OR all:stellarator OR all:"high-temperature superconducting" OR all:"inertial confinement")'
+  Energiespeicher: 'all:"solid-state battery" OR all:"sodium-ion" OR all:"perovskite tandem" OR all:"thermal energy storage" OR all:electrolyzer'
+  AutonomeFahrzeuge: 'all:"autonomous driving" AND (all:lidar OR all:radar OR all:"functional safety" OR all:teleoperation)'
+  DeepTech: 'all:neuromorphic OR all:"photonic chip" OR all:metamaterial OR all:"quantum sensor" OR all:"quantum error correction"'
+  Neuroprothesen: 'all:"brain-computer interface" OR all:"neural implant" OR all:"neuroprosthesis"'
 
 # Falls ein Feed nicht mehr existiert: einfach löschen/ersetzen, das Skript läuft trotzdem weiter.
 feeds:
@@ -101,3 +113,11 @@ feeds:
   SpaceNews: "https://spacenews.com/feed/"
   Hackaday: "https://hackaday.com/blog/feed/"
   New Atlas: "https://newatlas.com/index.rss"
+  Nature Energy: "https://www.nature.com/nenergy.rss"
+  Nature Electronics: "https://www.nature.com/natelectron.rss"
+  Nature Nanotechnology: "https://www.nature.com/nnano.rss"
+  Science Translational Medicine: "https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=stm"
+  The Robot Report: "https://www.therobotreport.com/feed/"
+  NASASpaceflight: "https://www.nasaspaceflight.com/feed/"
+  Ars Technica Space: "https://feeds.arstechnica.com/arstechnica/space"
+  MIT Technology Review: "https://www.technologyreview.com/feed/"
