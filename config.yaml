@@ -74,10 +74,10 @@ hardware_keywords: ["actuat*", "gripper*", "soft robot*", "prototype*", "thruste
 
 # Stimmen (edge-tts, kostenlos). Fallback, falls eine Stimme nicht klappt.
 voices:
-  LENA: "de-DE-SeraphinaMultilingualNeural"
+  LENA: "de-DE-AmalaNeural"
   JONAS: "de-DE-FlorianMultilingualNeural"
 fallback_voices:
-  LENA: "de-DE-KatjaNeural"
+  LENA: "de-DE-LouisaNeural"
   JONAS: "de-DE-ConradNeural"
 speech_rate: "+0%"       # z.B. "+10%" für schneller
 
