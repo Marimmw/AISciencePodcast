@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Täglicher KI-Podcast: Quellen holen -> ranken -> Skripte -> TTS -> RSS-Feed."""
-import os, re, io, json, time, asyncio, html, hashlib, urllib.request
+import os, re, io, json, time, asyncio, html, hashlib, urllib.request, threading
 import datetime as dt
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.utils import format_datetime
 from pathlib import Path
 from urllib.parse import quote_plus
@@ -108,21 +109,37 @@ def article_text(cfg, c):
 
 # ---------------------------------------------------------------- LLM
 BUDGET = {"left": 10**9}  # harte Obergrenze für LLM-Anfragen pro Tag (inkl. Wiederholungen)
-
-
 MODELS = {"list": [], "i": 0}  # Modellkette aus config.yaml; wird bei Fehlern der Reihe nach durchgegangen
+_llm_lock = threading.Lock()  # schützt BUDGET und MODELS bei parallelen Aufrufen
 
 
-def llm(client, cfg, prompt, json_mode=False):
-    conf = types.GenerateContentConfig(response_mime_type="application/json") if json_mode else None
+def _make_conf(cfg, json_mode, no_thinking=False):
+    """Baut GenerateContentConfig mit optionalem Thinking-Budget."""
+    kwargs = {}
+    if json_mode:
+        kwargs["response_mime_type"] = "application/json"
+    if not no_thinking:
+        level = cfg.get("thinking_level", "")
+        budget = {"none": 0, "low": 1024, "medium": 8192, "high": 24576}.get(level)
+        if budget is not None:
+            try:
+                kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=budget)
+            except Exception:
+                pass
+    return types.GenerateContentConfig(**kwargs) if kwargs else None
+
+
+def llm(client, cfg, prompt, json_mode=False, _no_thinking=False):
+    conf = _make_conf(cfg, json_mode, _no_thinking)
     fails = 0
     while True:
-        if MODELS["i"] >= len(MODELS["list"]):
-            raise RuntimeError("Kein Gemini-Modell verfügbar (siehe 'models' in config.yaml)")
-        if BUDGET["left"] <= 0:
-            raise RuntimeError("Tagesbudget für LLM-Anfragen erreicht (daily_llm_budget)")
-        BUDGET["left"] -= 1
-        model = MODELS["list"][MODELS["i"]]
+        with _llm_lock:
+            if MODELS["i"] >= len(MODELS["list"]):
+                raise RuntimeError("Kein Gemini-Modell verfügbar (siehe 'models' in config.yaml)")
+            if BUDGET["left"] <= 0:
+                raise RuntimeError("Tagesbudget für LLM-Anfragen erreicht (daily_llm_budget)")
+            BUDGET["left"] -= 1
+            model = MODELS["list"][MODELS["i"]]
         try:
             r = client.models.generate_content(model=model, contents=prompt, config=conf)
             if r.text:
@@ -132,14 +149,20 @@ def llm(client, cfg, prompt, json_mode=False):
             err = str(ex)
             if "404" in err or "NOT_FOUND" in err:
                 print(f"Modell {model} nicht verfügbar -> nächstes Modell")
-                MODELS["i"] += 1
+                with _llm_lock:
+                    if MODELS["i"] < len(MODELS["list"]) - 1:
+                        MODELS["i"] += 1
                 continue
+            if not _no_thinking and ("thinking" in err.lower() or "INVALID_ARGUMENT" in err):
+                print(f"Thinking nicht unterstützt ({model}), deaktiviere für diesen Lauf")
+                return llm(client, cfg, prompt, json_mode=json_mode, _no_thinking=True)
         fails += 1
         print(f"LLM-Fehler ({model}, Versuch {fails}): {err[:150]}")
         if fails >= 6:
             raise RuntimeError("LLM nicht erreichbar")
-        if fails % 3 == 0 and MODELS["i"] < len(MODELS["list"]) - 1:
-            MODELS["i"] += 1  # z.B. Tageslimit dieses Modells erschöpft -> anderes Modell hat eigenes Kontingent
+        with _llm_lock:
+            if fails % 3 == 0 and MODELS["i"] < len(MODELS["list"]) - 1:
+                MODELS["i"] += 1  # Tageslimit erschöpft -> nächstes Modell
         time.sleep(15 * fails)
 
 
@@ -319,19 +342,36 @@ def main():
     for c, s in chosen:
         print(f" - [{s}] {c['title']}")
 
-    # Segmente zuerst erzeugen; bei Quota-Ende wird mit dem Fertigen weitergemacht
-    body, done = [], []
-    for k, (c, _) in enumerate(chosen, 1):
+    # Segmente parallel erzeugen (segment_workers aus config.yaml, Standard: 1)
+    workers = max(1, cfg.get("segment_workers", 1))
+
+    def _gen_seg(args):
+        k, c = args
         try:
             seg = segment(client, cfg, c, k, len(chosen))
+            return k, c, seg, None
         except RuntimeError as ex:
-            print(f"Abbruch bei Thema {k}: {ex} -> Folge wird mit {len(done)} Themen gebaut")
-            break
-        if not seg:
-            print(f"Thema {k}: leeres Skript, übersprungen"); continue
-        print(f"Segment {k}: {sum(len(t.split()) for _, t in seg)} Wörter")
-        body += seg; done.append(c)
-        time.sleep(4)
+            return k, c, None, str(ex)
+
+    body_parts, done_parts = {}, {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        fs = {pool.submit(_gen_seg, (k, c)): k for k, (c, _) in enumerate(chosen, 1)}
+        for fut in as_completed(fs):
+            k, c, seg, err = fut.result()
+            if err:
+                print(f"Thema {k} fehlgeschlagen: {err} -> übersprungen")
+            elif not seg:
+                print(f"Thema {k}: leeres Skript, übersprungen")
+            else:
+                print(f"Segment {k}: {sum(len(t.split()) for _, t in seg)} Wörter")
+                body_parts[k] = seg
+                done_parts[k] = c
+
+    body, done = [], []
+    for k in sorted(body_parts):
+        body += body_parts[k]
+        done.append(done_parts[k])
+
     if not done:
         state["llm_usage"] = {"date": day, "count": budget_total - BUDGET["left"]}
         sp.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
