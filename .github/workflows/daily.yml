@@ -1,7 +1,7 @@
 name: daily-podcast
 on:
   schedule:
-    - cron: "30 3 * * *"   # 03:30 UTC = 04:30/05:30 Uhr deutscher Zeit; Laufzeit ca. 10-30 min
+    - cron: "16 3 * * *"   # 03:30 UTC = 04:30/05:30 Uhr deutscher Zeit; Laufzeit ca. 10-30 min
   workflow_dispatch:
 permissions:
   contents: write
